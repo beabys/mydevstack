@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useToast } from '@/composables/useToast'
 import { s3Service, refreshS3Client } from '@/api/services/s3'
 import Modal from '@/components/common/Modal.vue'
 
 const settingsStore = useSettingsStore()
+const toast = useToast()
 
 // State
 const buckets = ref<any[]>([])
@@ -256,9 +258,16 @@ async function deleteBucket(name: string) {
   try {
     refreshS3Client()
     await s3Service.deleteBucket(name)
+    toast.success(`Bucket "${name}" deleted successfully`)
     await loadBuckets()
   } catch (e: any) {
-    error.value = 'Failed to delete bucket: ' + e.message
+    console.error('Delete bucket error:', e)
+    const errMsg = e.message || ''
+    if (e.name === 'BucketNotEmpty' || e.statusCode === 409 || errMsg.includes('not empty') || errMsg.includes('BucketNotEmpty')) {
+      toast.error('Conflict: Cannot delete bucket - Bucket is not empty. Delete all objects first.')
+    } else {
+      toast.error('Failed to delete bucket: ' + errMsg)
+    }
   } finally {
     loading.value = false
   }
@@ -303,9 +312,10 @@ async function deleteObject(key: string) {
   try {
     refreshS3Client()
     await s3Service.deleteObject(selectedBucket.value!, key)
+    toast.success('Object deleted')
     await loadObjects(selectedBucket.value!)
   } catch (e: any) {
-    error.value = 'Failed to delete: ' + e.message
+    toast.error('Failed to delete: ' + e.message)
   } finally {
     loading.value = false
   }
@@ -354,7 +364,7 @@ async function downloadObject(key: string) {
     window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
   } catch (e: any) {
-    error.value = 'Failed to download object: ' + e.message
+    toast.error('Failed to download object: ' + e.message)
   }
 }
 

@@ -2,12 +2,15 @@
 import { computed, onMounted, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useUIStore } from '@/stores/ui'
+import { useToast } from '@/composables/useToast'
 import Sidebar from '@/components/Sidebar.vue'
 import TopBar from '@/components/TopBar.vue'
 import NotificationToast from '@/components/NotificationToast.vue'
+import Toast from '@/components/common/Toast.vue'
 
 const settingsStore = useSettingsStore()
 const uiStore = useUIStore()
+const toast = useToast()
 
 const isDark = computed(() => settingsStore.darkMode)
 
@@ -56,6 +59,10 @@ watch(isDark, (dark) => {
 
     <!-- Notifications -->
     <NotificationToast />
+    <Toast
+      :toast="toast.currentToast.value"
+      @dismiss="toast.removeToast"
+    />
   </div>
 </template>
 

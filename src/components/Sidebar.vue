@@ -46,7 +46,6 @@ const services: Service[] = [
 const navItems = [
   { name: 'Dashboard', path: '/', icon: 'home' },
   { name: 'Settings', path: '/settings', icon: 'cog' },
-  { name: 'Logs', path: '/logs', icon: 'document' },
 ]
 
 const isActive = (path: string) => {

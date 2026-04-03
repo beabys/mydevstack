@@ -11,9 +11,11 @@ import {
   DeleteBucketCommand,
   HeadBucketCommand,
   ListObjectsCommand,
+  ListObjectsV2Command,
   GetObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   HeadObjectCommand,
   type ListBucketsCommandOutput,
   type CreateBucketCommandOutput,
@@ -108,9 +110,47 @@ export class S3Service {
         Bucket: bucket,
       })
       await client.send(command)
-    } catch (error) {
+    } catch (error: any) {
+      console.error('S3 deleteBucket error:', error)
+      const errMsg = error.message || ''
+      if (error.$metadata?.statusCode === 409 || errMsg.includes('not empty') || errMsg.includes('BucketNotEmpty')) {
+        const msg = 'Bucket is not empty. Delete all objects first.'
+        throw new APIError(msg, 409, 's3')
+      }
       if (error instanceof APIError) throw error
       throw new APIError(`Failed to delete bucket: ${bucket}`, 500, 's3')
+    }
+  }
+
+  async emptyBucket(bucket: string): Promise<void> {
+    try {
+      const client = this.getClient()
+      
+      // Delete all objects
+      let continuationToken: string | undefined
+      do {
+        const listCommand = new ListObjectsV2Command({
+          Bucket: bucket,
+          ContinuationToken: continuationToken,
+        })
+        const listResponse = await client.send(listCommand)
+        
+        if (listResponse.Contents && listResponse.Contents.length > 0) {
+          const deleteParams = {
+            Bucket: bucket,
+            Delete: {
+              Objects: listResponse.Contents.map((obj) => ({ Key: obj.Key! })),
+            },
+          }
+          await client.send(new DeleteObjectsCommand(deleteParams))
+        }
+        
+        continuationToken = listResponse.NextContinuationToken
+      } while (continuationToken)
+      
+    } catch (error: any) {
+      console.error('S3 emptyBucket error:', error)
+      throw new APIError(`Failed to empty bucket: ${bucket}`, 500, 's3')
     }
   }
 
@@ -273,6 +313,7 @@ export const listBuckets = () => s3Service.listBuckets()
 export const createBucket = (bucket: string, options?: { enableCors?: boolean }) => 
   s3Service.createBucket(bucket, options)
 export const deleteBucket = (bucket: string) => s3Service.deleteBucket(bucket)
+export const emptyBucket = (bucket: string) => s3Service.emptyBucket(bucket)
 export const headBucket = (bucket: string) => s3Service.headBucket(bucket)
 export const headObject = (bucket: string, key: string) => s3Service.headObject(bucket, key)
 export const listObjects = (bucket: string, options?: Parameters<S3Service['listObjects']>[1]) => 

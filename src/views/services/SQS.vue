@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useToast } from '@/composables/useToast'
 import Modal from '@/components/common/Modal.vue'
+import FormInput from '@/components/common/FormInput.vue'
+import Button from '@/components/common/Button.vue'
+import * as sqsApi from '@/api/services/sqs'
 
 const settingsStore = useSettingsStore()
+const toast = useToast()
+const { listQueues, createQueue: sqsCreateQueue, deleteQueue: sqsDeleteQueue, getQueueAttributes } = sqsApi
 
 const queues = ref<any[]>([])
 const loading = ref(false)
-const error = ref<string | null>(null)
+const showCreateModal = ref(false)
+const newQueue = ref({
+  name: '',
+  isFifo: false,
+})
 
 // Example code tabs
 const selectedExample = ref(0)
@@ -184,26 +194,16 @@ const viewError = ref<string | null>(null)
 
 async function loadQueues() {
   loading.value = true
-  error.value = null
   
   try {
-    const response = await fetch('/sqs?Action=ListQueues')
-    const xml = await response.text()
-    
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(xml, 'text/xml')
-    const queueUrls = doc.querySelectorAll('QueueUrl')
-    const queueList: any[] = []
-    
-    queueUrls.forEach((urlEl) => {
-      const url = urlEl.textContent || ''
-      const name = url.split('/').pop() || url
-      queueList.push({ url, name })
-    })
-    
+    const urls = await listQueues()
+    const queueList = urls.map((url: string) => ({
+      url,
+      name: url.split('/').pop() || url
+    }))
     queues.value = queueList
   } catch (e: any) {
-    error.value = e.message
+    toast.error('Failed to load queues', e.message || 'Unknown error')
     queues.value = []
   } finally {
     loading.value = false
@@ -211,15 +211,20 @@ async function loadQueues() {
 }
 
 async function createQueue() {
-  const name = prompt('Enter queue name:')
-  if (!name?.trim()) return
+  if (!newQueue.value.name?.trim()) {
+    toast.error('Queue name is required')
+    return
+  }
   
   loading.value = true
   try {
-    await fetch(`/sqs?Action=CreateQueue&QueueName=${encodeURIComponent(name.trim())}`)
+    await sqsCreateQueue(newQueue.value.name.trim(), newQueue.value.isFifo)
+    toast.success('Queue created', 'Queue created successfully')
+    showCreateModal.value = false
+    newQueue.value = { name: '', isFifo: false }
     await loadQueues()
   } catch (e: any) {
-    error.value = 'Failed to create queue: ' + e.message
+    toast.error('Failed to create queue', e.message || 'Unknown error')
   } finally {
     loading.value = false
   }
@@ -230,10 +235,11 @@ async function deleteQueue(url: string) {
   
   loading.value = true
   try {
-    await fetch(`/sqs?Action=DeleteQueue&QueueUrl=${encodeURIComponent(url)}`)
+    await sqsDeleteQueue(url)
+    toast.success('Queue deleted', 'Queue deleted successfully')
     await loadQueues()
   } catch (e: any) {
-    error.value = 'Failed to delete queue: ' + e.message
+    toast.error('Failed to delete queue', e.message || 'Unknown error')
   } finally {
     loading.value = false
   }
@@ -276,29 +282,19 @@ async function viewQueue(url: string, name: string) {
   viewLoading.value = true
 
   try {
-    const response = await fetch(`/sqs?Action=GetQueueAttributes&QueueUrl=${encodeURIComponent(url)}&AttributeName=All`)
-    const xml = await response.text()
+    const attributes = await getQueueAttributes(url, ['All'])
     
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(xml, 'text/xml')
+    const parsedAttributes: { name: string; value: string }[] = []
+    for (const [key, value] of Object.entries(attributes)) {
+      if (key !== 'QueueUrl' && value !== undefined) {
+        parsedAttributes.push({
+          name: key,
+          value: String(value)
+        })
+      }
+    }
     
-    // Parse attribute elements
-    const attributeElements = doc.querySelectorAll('Attribute')
-    const attributes: { name: string; value: string }[] = []
-    
-    attributeElements.forEach((attrEl) => {
-      const nameEl = attrEl.querySelector('Name')
-      const valueEl = attrEl.querySelector('Value')
-      const attrName = nameEl?.textContent || ''
-      const attrValue = valueEl?.textContent || ''
-      
-      attributes.push({
-        name: attrName,
-        value: formatAttributeValue(attrName, attrValue)
-      })
-    })
-    
-    viewAttributes.value = attributes
+    viewAttributes.value = parsedAttributes
   } catch (e: any) {
     viewError.value = 'Failed to get queue attributes: ' + e.message
   } finally {
@@ -384,7 +380,7 @@ onMounted(() => {
       <div class="flex gap-2">
         <button
           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          @click="createQueue"
+          @click="showCreateModal = true"
         >
           + Create Queue
         </button>
@@ -395,13 +391,6 @@ onMounted(() => {
           ↻ Refresh
         </button>
       </div>
-    </div>
-
-    <div
-      v-if="error"
-      class="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg"
-    >
-      {{ error }}
     </div>
 
     <div
@@ -640,4 +629,44 @@ onMounted(() => {
       </div>
     </div>
   </div>
+
+  <!-- Create Queue Modal -->
+  <Modal
+    :open="showCreateModal"
+    title="Create Queue"
+    @close="showCreateModal = false"
+  >
+    <div class="space-y-4">
+      <FormInput
+        v-model="newQueue.name"
+        label="Queue Name"
+        placeholder="my-queue"
+      />
+      <label class="flex items-center gap-2">
+        <input
+          v-model="newQueue.isFifo"
+          type="checkbox"
+          class="w-4 h-4 rounded border-gray-300"
+        >
+        <span class="text-sm">FIFO Queue</span>
+      </label>
+    </div>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <Button
+          variant="secondary"
+          @click="showCreateModal = false"
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          :loading="loading"
+          @click="createQueue"
+        >
+          Create
+        </Button>
+      </div>
+    </template>
+  </Modal>
 </template>

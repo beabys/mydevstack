@@ -10,6 +10,7 @@ export {
   listBuckets,
   createBucket,
   deleteBucket,
+  emptyBucket,
   headBucket,
   listObjects,
   listObjectsV2,
@@ -17,7 +18,6 @@ export {
   getObject,
   headObject,
   deleteObject,
-  deleteObjects,
   S3Service,
 } from './s3'
 
@@ -53,8 +53,6 @@ export {
   scan,
   batchWriteItem,
   batchGetItem,
-  transactWriteItems,
-  transactGetItems,
   DynamoDBService,
 } from './dynamodb'
 
@@ -66,17 +64,9 @@ export {
   createQueue,
   deleteQueue,
   sendMessage,
-  receiveMessages,
   deleteMessage,
-  deleteMessages,
   purgeQueue,
-  listDeadLetterSourceQueues,
   setQueueAttributes,
-  addPermission,
-  removePermission,
-  tagQueue,
-  untagQueue,
-  listQueueTags,
 } from './sqs'
 
 // SNS Service (functional)
@@ -85,20 +75,15 @@ export {
   createTopic,
   deleteTopic,
   getTopicAttributes,
-  setTopicAttributes,
   subscribe,
   listSubscriptions,
   listSubscriptionsByTopic,
   unsubscribe,
   publish,
-  publishJSON,
   confirmSubscription,
   getSubscriptionAttributes,
   setSubscriptionAttributes,
-  tagResource,
-  untagResource,
   listTagsForResource,
-  listEndpointsByPlatformApplication,
 } from './sns'
 
 // IAM Service
@@ -128,12 +113,12 @@ export {
   encrypt,
   decrypt,
   generateDataKey,
-  generateDataKeyWithoutPlaintext,
   sign,
   verify,
   enableKey,
   disableKey,
   scheduleKeyDeletion,
+  deleteKey,
   cancelKeyDeletion,
   getKeyRotationStatus,
   enableKeyRotation,
@@ -151,8 +136,6 @@ export {
   describeSecret,
   rotateSecret,
   getRandomPassword,
-  tagSecret,
-  untagSecret,
   restoreSecret,
 } from './secrets-manager'
 
@@ -169,10 +152,8 @@ export {
   disableRule,
   enableRule,
   putTargets,
-  listTargets,
   removeTargets,
   putEvents,
-  testEventPattern,
 } from './eventbridge'
 
 // CloudWatch Service
@@ -180,19 +161,11 @@ export {
   createLogGroup,
   describeLogGroups,
   deleteLogGroup,
-  createLogStream,
   describeLogStreams,
-  deleteLogStream,
-  putLogEvents,
   getLogEvents,
   putMetricData,
-  getMetricData,
   getMetricStatistics,
   listMetrics,
-  putDashboard,
-  getDashboard,
-  listDashboards,
-  deleteDashboard,
 } from './cloudwatch'
 
 // Step Functions Service
@@ -239,11 +212,9 @@ export {
   createResource,
   getResources,
   deleteResource,
-  createMethod,
   getMethod,
   deleteMethod,
   createDeployment,
-  getDeployments,
   createStage,
   getStages,
   createHttpApi,
@@ -256,8 +227,7 @@ export {
   createIntegration,
   getIntegrations,
   deleteIntegration,
-  createHttpApiStage,
-  getHttpApiStages,
+  refreshAPIGatewayClient,
 } from './api-gateway'
 
 // Kinesis Service
@@ -272,10 +242,6 @@ export {
   getRecords,
   getShardIterator,
   listShards,
-  registerStreamConsumer,
-  listStreamConsumers,
-  describeStreamConsumer,
-  deregisterStreamConsumer,
   splitShard,
   mergeShards,
   updateShardCount,
@@ -310,16 +276,10 @@ export {
   getParameters,
   getParametersByPath,
   deleteParameter,
-  deleteParameters,
   describeParameters,
   getParameterHistory,
   addTagsToResource,
   removeTagsFromResource,
-  labelParameterVersion,
-  getParameterPolicy,
-  putParameterPolicy,
-  deleteParameterPolicy,
-  listParameterPolicies,
 } from './ssm'
 
 // Re-export APIError for convenience

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useUIStore } from '@/stores/ui'
 import { useToast } from '@/composables/useToast'
 import DataTable from '@/components/common/DataTable.vue'
 import Modal from '@/components/common/Modal.vue'
@@ -12,9 +13,11 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import Tabs from '@/components/common/Tabs.vue'
 import * as apigateway from '@/api/services/api-gateway'
+import { refreshAPIGatewayClient } from '@/api/services/api-gateway'
 import type { APIGatewayRestAPI, APIGatewayResource, APIGatewayMethod } from '@/api/types/aws'
 
 const settingsStore = useSettingsStore()
+const uiStore = useUIStore()
 const toast = useToast()
 
 // State
@@ -533,22 +536,15 @@ const integrationColumns = computed(() => [
 
 // Load REST APIs
 async function loadRestApis() {
-  console.log('loadRestApis: Starting...')
   loadingRestApis.value = true
   try {
     const response = await apigateway.getRestApis()
-    console.log('loadRestApis response:', response)
-    console.log('response.items:', response.items)
-    console.log('response.items length:', response.items?.length)
     restApis.value = response.items || []
-    console.log('restApis after set:', restApis.value)
-    console.log('restApis.value.length:', restApis.value.length)
   } catch (error) {
     console.error('Error loading REST APIs:', error)
     toast.error('Failed to load REST APIs')
   } finally {
     loadingRestApis.value = false
-    console.log('loadRestApis: Finished, loadingRestApis set to false')
   }
 }
 
@@ -590,8 +586,6 @@ async function loadMethods(resource: APIGatewayResource) {
 
 // Create REST API
 async function createRestApi() {
-  console.log('createRestApi called, newRestApiName:', newRestApiName.value)
-  
   if (!newRestApiName.value) {
     toast.error('API name is required')
     return
@@ -599,11 +593,9 @@ async function createRestApi() {
 
   creating.value = true
   try {
-    console.log('Creating REST API with:', { name: newRestApiName.value, description: newRestApiDescription.value })
-    const response = await apigateway.createRestApi(newRestApiName.value, {
+    await apigateway.createRestApi(newRestApiName.value, {
       Description: newRestApiDescription.value,
     })
-    console.log('REST API created:', response)
     toast.success('REST API created successfully')
     showCreateRestModal.value = false
     newRestApiName.value = ''
@@ -800,18 +792,20 @@ async function loadIntegrations(api: any) {
 async function createHttpApi() {
   creating.value = true
   try {
-    await apigateway.createHttpApi({
-      name: newHttpApiName.value || undefined,
-      description: newHttpApiDescription.value || undefined,
-    })
+    const options: any = {}
+    if (newHttpApiName.value) options.name = newHttpApiName.value
+    if (newHttpApiDescription.value) options.description = newHttpApiDescription.value
+    
+    await apigateway.createHttpApi(options)
     toast.success('HTTP API created successfully')
     showCreateHttpModal.value = false
     newHttpApiName.value = ''
     newHttpApiDescription.value = ''
     loadHttpApis()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating HTTP API:', error)
-    toast.error('Failed to create HTTP API')
+    const message = error?.message || 'Failed to create HTTP API'
+    toast.error(message)
   } finally {
     creating.value = false
   }
@@ -907,7 +901,7 @@ onMounted(() => {
 
     <!-- Tabs -->
     <Tabs
-      v-model="activeTab"
+      v-model:active-tab="activeTab"
       :tabs="[
         { id: 'rest', label: 'REST APIs' },
         { id: 'http', label: 'HTTP APIs' },

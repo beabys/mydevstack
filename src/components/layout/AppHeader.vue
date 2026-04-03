@@ -12,6 +12,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useConnectionStatus } from '@/composables/useConnectionStatus'
 import { searchServices } from '@/composables/useServices'
+import { refreshAllClients } from '@/api/refresh-clients'
 import type { Service, AppNotification } from '@/types/services'
 
 // Props
@@ -187,6 +188,7 @@ function getNotificationClasses(type: AppNotification['type']): string {
 // Save endpoint
 function saveEndpoint(): void {
   setEndpoint(endpointInput.value)
+  refreshAllClients()
   showEndpointInput.value = false
   showEndpointDropdown.value = false
 }

@@ -4,6 +4,7 @@ import { ref, computed, watch } from 'vue'
 export type Theme = 'light' | 'dark' | 'system'
 export type SidebarPosition = 'left' | 'right'
 export type TimeRange = '15m' | '30m' | '1h' | '6h' | '24h' | 'custom'
+export type Provider = 'aws' | 'localstack' | 'ministack'
 
 export interface SettingsState {
   endpoint: string
@@ -31,6 +32,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const region = ref<string>(localStorage.getItem('region') || 'us-east-1')
   const accessKey = ref<string>(localStorage.getItem('accessKey') || 'test')
   const secretKey = ref<string>(localStorage.getItem('secretKey') || 'test')
+  const provider = ref<Provider>(
+    (localStorage.getItem('provider') as Provider) || 'localstack'
+  )
 
   // State - Appearance
   const darkMode = ref<boolean>(
@@ -85,6 +89,7 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(region, (val) => localStorage.setItem('region', val))
   watch(accessKey, (val) => localStorage.setItem('accessKey', val))
   watch(secretKey, (val) => localStorage.setItem('secretKey', val))
+  watch(provider, (val) => localStorage.setItem('provider', val))
   watch(darkMode, (val) => localStorage.setItem('darkMode', String(val)))
   watch(theme, (val) => localStorage.setItem('theme', val))
   watch(sidebarPosition, (val) => localStorage.setItem('sidebarPosition', val))
@@ -109,6 +114,10 @@ export const useSettingsStore = defineStore('settings', () => {
   function setCredentials(key: string, secret: string) {
     accessKey.value = key
     secretKey.value = secret
+  }
+
+  function setProvider(newProvider: Provider) {
+    provider.value = newProvider
   }
 
   function toggleDarkMode() {
@@ -208,6 +217,7 @@ export const useSettingsStore = defineStore('settings', () => {
     region,
     accessKey,
     secretKey,
+    provider,
     // State - Appearance
     darkMode,
     theme,
@@ -228,6 +238,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setEndpoint,
     setRegion,
     setCredentials,
+    setProvider,
     // Actions - Appearance
     toggleDarkMode,
     setDarkMode,

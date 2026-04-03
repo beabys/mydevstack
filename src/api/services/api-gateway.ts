@@ -57,6 +57,9 @@ import {
   type GetIntegrationsCommandOutput,
   type CreateIntegrationCommandOutput,
 } from '@aws-sdk/client-apigatewayv2'
+import {
+  ProtocolType,
+} from '@aws-sdk/client-apigatewayv2'
 import yaml from 'js-yaml'
 import { useSettingsStore } from '@/stores/settings'
 import { APIError } from '../client'
@@ -102,7 +105,9 @@ function getAPIGatewayV2Client(): ApiGatewayV2Client {
 
 export function refreshAPIGatewayClient(): void {
   apiGatewayClient = null
+  apiGatewayV2Client = null
   getAPIGatewayClient()
+  getAPIGatewayV2Client()
 }
 
 export class APIGatewayService {
@@ -171,9 +176,33 @@ export class APIGatewayService {
   }): Promise<any> {
     try {
       const client = this.getClient()
+      
+      const patchOperations = []
+      if (options?.name !== undefined) {
+        patchOperations.push({
+          op: 'replace',
+          path: '/name',
+          value: options.name,
+        })
+      }
+      if (options?.description !== undefined) {
+        patchOperations.push({
+          op: 'replace',
+          path: '/description',
+          value: options.description,
+        })
+      }
+      if (options?.version !== undefined) {
+        patchOperations.push({
+          op: 'replace',
+          path: '/version',
+          value: options.version,
+        })
+      }
+
       const command = new UpdateRestApiCommand({
         restApiId: apiId,
-        ...options,
+        patchOperations,
       } as any)
       return await client.send(command)
     } catch (error) {
@@ -472,31 +501,42 @@ export const getHttpApis = async (options?: any): Promise<any> => {
     const response: GetApisCommandOutput = await client.send(command)
     return response
   } catch (error: any) {
-    // LocalStack returns 501 for unimplemented HTTP APIs
+    const isLocalStackDateBug = error.message?.includes('RFC-3339') || error.message?.includes('date-time')
+    if (isLocalStackDateBug) {
+      throw new APIError('HTTP APIs are not supported by this provider - LocalStack date serialization bug', 500, 'apigateway')
+    }
+    console.error('Error getting HTTP APIs:', error)
+    const errorMessage = error.message || error.$metadata?.errorMessage || JSON.stringify(error) || String(error)
     if (error.statusCode === 501 || error.name === 'NotImplemented') {
-      console.warn('HTTP APIs not supported by LocalStack, returning empty list')
-      return { items: [] }
+      throw new APIError('HTTP APIs are not supported by this provider', 501, 'apigateway')
     }
     if (error instanceof APIError) throw error
-    throw new APIError('Failed to get HTTP APIs', 500, 'apigateway')
+    throw new APIError(`Failed to get HTTP APIs: ${errorMessage}`, 500, 'apigateway')
   }
 }
 
-export const createHttpApi = async (name: string, options?: any): Promise<any> => {
+export const createHttpApi = async (options?: any): Promise<any> => {
   try {
     const client = getAPIGatewayV2Client()
     const command = new CreateApiCommand({
-      name,
-      ...options,
+      Name: options?.name,
+      ProtocolType: ProtocolType.HTTP,
+      Description: options?.description,
     })
     const response: CreateApiCommandOutput = await client.send(command)
     return response
   } catch (error: any) {
+    const isLocalStackDateBug = error.message?.includes('RFC-3339') || error.message?.includes('date-time')
+    if (isLocalStackDateBug) {
+      throw new APIError('HTTP APIs are not supported by this provider - LocalStack date serialization bug', 500, 'apigateway')
+    }
+    console.error('Error creating HTTP API:', error)
+    const errorMessage = error.message || error.$metadata?.errorMessage || JSON.stringify(error) || String(error)
     if (error.statusCode === 501 || error.name === 'NotImplemented') {
-      throw new APIError('HTTP APIs are not supported by LocalStack', 501, 'apigateway')
+      throw new APIError('HTTP APIs are not supported by this provider', 501, 'apigateway')
     }
     if (error instanceof APIError) throw error
-    throw new APIError(`Failed to create HTTP API: ${name}`, 500, 'apigateway')
+    throw new APIError(`Failed to create HTTP API: ${errorMessage}`, 500, 'apigateway')
   }
 }
 
@@ -520,8 +560,12 @@ export const getHttpApi = async (apiId: string): Promise<any> => {
     const command = new GetApiCommand({ ApiId: apiId })
     return await client.send(command)
   } catch (error: any) {
+    const isLocalStackDateBug = error.message?.includes('RFC-3339') || error.message?.includes('date-time')
+    if (isLocalStackDateBug) {
+      throw new APIError('HTTP APIs are not supported by this provider - LocalStack date serialization bug', 500, 'apigateway')
+    }
     if (error.statusCode === 501 || error.name === 'NotImplemented') {
-      return { items: [] }
+      throw new APIError('HTTP APIs are not supported by this provider', 501, 'apigateway')
     }
     if (error instanceof APIError) throw error
     throw new APIError(`Failed to get HTTP API: ${apiId}`, 500, 'apigateway')
