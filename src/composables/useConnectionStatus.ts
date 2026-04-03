@@ -1,53 +1,72 @@
 // Connection status composable for AWS-compatible services
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
 
 const CONNECTION_CHECK_INTERVAL = 30000 // 30 seconds
 
-// Global state
+// Global singleton state
 const connectionStatus = ref({
   isConnected: false,
   isReachable: false,
   lastChecked: null as Date | null,
-  endpoint: undefined as string | undefined
+  endpoint: ''
 })
 
 let checkInterval: ReturnType<typeof setInterval> | null = null
+let hasStartedMonitoring = false
 
-// Check AWS endpoint connectivity using the proxy
+// Check AWS endpoint connectivity
 async function checkConnection(): Promise<boolean> {
-  // Try to connect via proxy
+  const settingsStore = useSettingsStore()
+  const targetEndpoint = settingsStore.endpoint || 'http://localhost:4566'
+
   const strategies = [
-    // Strategy 1: Try S3 via proxy
     async () => {
       try {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000)
         
-        const response = await fetch('/s3/', {
+        const response = await fetch(`${targetEndpoint}/`, {
           method: 'GET',
           signal: controller.signal,
         })
         
         clearTimeout(timeoutId)
-        return response.ok || response.status === 200 || response.type === 'opaque'
+        return response.ok || response.status === 200 || response.status === 403 || response.status === 404 || response.type === 'opaque'
+      } catch {
+        return false
+      }
+    },
+
+    async () => {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        
+        const response = await fetch(`${targetEndpoint}/s3/`, {
+          method: 'GET',
+          signal: controller.signal,
+        })
+        
+        clearTimeout(timeoutId)
+        return response.ok || response.status === 200 || response.status === 404 || response.type === 'opaque'
       } catch {
         return false
       }
     },
     
-    // Strategy 2: Try Lambda via proxy
     async () => {
       try {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000)
         
-        const response = await fetch('/2015-03-31/functions/', {
+        const response = await fetch(`${targetEndpoint}/2015-03-31/functions/`, {
           method: 'GET',
           signal: controller.signal,
         })
         
         clearTimeout(timeoutId)
-        return response.ok || response.status === 200 || response.type === 'opaque'
+        return response.ok || response.status === 200 || response.status === 404 || response.type === 'opaque'
       } catch {
         return false
       }
@@ -67,12 +86,10 @@ async function checkConnection(): Promise<boolean> {
         return true
       }
     } catch (e) {
-      // Try next strategy
       continue
     }
   }
 
-  // Mark as not connected
   connectionStatus.value = {
     ...connectionStatus.value,
     isReachable: false,
@@ -83,18 +100,24 @@ async function checkConnection(): Promise<boolean> {
   return false
 }
 
-// Set endpoint URL and recheck
+// Set endpoint URL in settings and recheck
 function setEndpoint(url: string): void {
-  connectionStatus.value = {
-    ...connectionStatus.value,
-    endpoint: url
-  }
+  const settingsStore = useSettingsStore()
+  settingsStore.setEndpoint(url)
   checkConnection()
 }
 
-// Start periodic checks
+// Get current endpoint from settings
+function getEndpoint(): string {
+  const settingsStore = useSettingsStore()
+  return settingsStore.endpoint || 'http://localhost:4566'
+}
+
+// Start periodic checks - singleton pattern
 function startMonitoring(): void {
-  if (checkInterval) return
+  if (hasStartedMonitoring) return
+  
+  hasStartedMonitoring = true
   checkConnection()
   checkInterval = setInterval(checkConnection, CONNECTION_CHECK_INTERVAL)
 }
@@ -104,24 +127,13 @@ function stopMonitoring(): void {
   if (checkInterval) {
     clearInterval(checkInterval)
     checkInterval = null
+    hasStartedMonitoring = false
   }
-}
-
-// Manual trigger for connection check
-async function triggerConnectionCheck(): Promise<boolean> {
-  return await checkConnection()
 }
 
 export function useConnectionStatus() {
   onMounted(() => {
-    // Delay initial check to ensure settings are loaded
-    setTimeout(() => {
-      startMonitoring()
-    }, 500)
-  })
-
-  onUnmounted(() => {
-    stopMonitoring()
+    startMonitoring()
   })
 
   return {
@@ -129,14 +141,14 @@ export function useConnectionStatus() {
     isConnected: computed(() => connectionStatus.value.isConnected),
     isReachable: computed(() => connectionStatus.value.isReachable),
     lastChecked: computed(() => connectionStatus.value.lastChecked),
-    endpoint: computed(() => connectionStatus.value.endpoint),
+    endpoint: computed(() => getEndpoint()),
     checkConnection,
-    triggerConnectionCheck,
     setEndpoint,
+    getEndpoint,
     startMonitoring,
     stopMonitoring
   }
 }
 
-// Export for direct access if needed
-export { connectionStatus, checkConnection }
+// Export for direct access
+export { connectionStatus, checkConnection, startMonitoring, stopMonitoring }

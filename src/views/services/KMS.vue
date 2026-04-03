@@ -99,6 +99,10 @@ const columns = computed(() => [
   { key: 'KeyState', label: 'Status', sortable: true },
 ])
 
+onMounted(() => {
+  loadKeys()
+})
+
 // Code examples
 const selectedExample = ref(0)
 const codeExamples = computed(() => [

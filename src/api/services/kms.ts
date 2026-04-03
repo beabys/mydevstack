@@ -39,10 +39,14 @@ let kmsClient: KMSClient | null = null
 
 function getKMSClient(): KMSClient {
   const settingsStore = useSettingsStore()
+  let endpoint = settingsStore.endpoint
+  if (endpoint.endsWith('/')) {
+    endpoint = endpoint.slice(0, -1)
+  }
   
   if (!kmsClient) {
     kmsClient = new KMSClient({
-      endpoint: settingsStore.endpoint,
+      endpoint,
       region: settingsStore.region,
       credentials: {
         accessKeyId: settingsStore.accessKey,
@@ -129,7 +133,11 @@ export class KMSService {
         CiphertextBlob: response.CiphertextBlob || new Uint8Array(),
         KeyId: response.KeyId || '',
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('KMS encrypt error:', error)
+      if (error.message?.includes('Unknown action') || error.message?.includes('NotImplemented')) {
+        throw new APIError('KMS encrypt not supported by this LocalStack version', 501, 'kms')
+      }
       if (error instanceof APIError) throw error
       throw new APIError(`Failed to encrypt with KMS key: ${keyId}`, 500, 'kms')
     }
@@ -150,9 +158,13 @@ export class KMSService {
         Plaintext: response.Plaintext || new Uint8Array(),
         KeyId: response.KeyId || '',
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('KMS decrypt error:', error)
+      if (error.message?.includes('Unknown action') || error.message?.includes('NotImplemented')) {
+        throw new APIError('KMS decrypt not supported by this LocalStack version', 501, 'kms')
+      }
       if (error instanceof APIError) throw error
-      throw new APIError('Failed to decrypt with KMS', 500, 'kms')
+      throw new APIError('Failed to decrypt with KMS key', 500, 'kms')
     }
   }
 
@@ -236,12 +248,22 @@ export class KMSService {
   async scheduleKeyDeletion(keyId: string, pendingWindowInDays?: number): Promise<any> {
     try {
       const client = this.getClient()
+      console.log('KMS endpoint:', client.config.endpoint)
       const command = new ScheduleKeyDeletionCommand({
         KeyId: keyId,
         PendingWindowInDays: pendingWindowInDays,
       })
       return await client.send(command)
-    } catch (error) {
+    } catch (error: any) {
+      console.error('KMS scheduleKeyDeletion error:', error)
+      console.error('KMS response:', error.$response?.body)
+      if (error.$metadata?.statusCode === 400) {
+        const msg = error.message || 'Unknown error'
+        if (msg.includes('Unknown action')) {
+          throw new APIError('ScheduleKeyDeletion not supported by this LocalStack version', 400, 'kms')
+        }
+        throw new APIError(`Failed to schedule key deletion: ${msg}`, 400, 'kms')
+      }
       if (error instanceof APIError) throw error
       throw new APIError(`Failed to schedule key deletion: ${keyId}`, 500, 'kms')
     }
@@ -383,6 +405,22 @@ export const verify = (keyId: string, message: string, signature: Uint8Array, op
   kmsService.verify(keyId, message, signature, options)
 export const scheduleKeyDeletion = (keyId: string, pendingWindowInDays?: number) => 
   kmsService.scheduleKeyDeletion(keyId, pendingWindowInDays)
+
+export const deleteKey = async (keyId: string): Promise<any> => {
+  const client = getKMSClient()
+  try {
+    const command = new ScheduleKeyDeletionCommand({
+      KeyId: keyId,
+      PendingWindowInDays: 1,
+    })
+    return await client.send(command)
+  } catch (error: any) {
+    if (error.message?.includes('Unknown action') || error.message?.includes('NotImplemented')) {
+      throw new APIError('Key deletion not supported by LocalStack', 501, 'kms')
+    }
+    throw error
+  }
+}
 export const cancelKeyDeletion = (keyId: string) => kmsService.cancelKeyDeletion(keyId)
 export const getKeyRotationStatus = (keyId: string) => kmsService.getKeyRotationStatus(keyId)
 export const enableKeyRotation = (keyId: string) => kmsService.enableKeyRotation(keyId)

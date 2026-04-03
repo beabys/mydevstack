@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useUIStore } from '@/stores/ui'
+import { refreshAllClients } from '@/api/refresh-clients'
 import FormInput from '@/components/common/FormInput.vue'
 import FormSelect from '@/components/common/FormSelect.vue'
 import Button from '@/components/common/Button.vue'
@@ -32,6 +33,7 @@ const endpointUrl = ref(settingsStore.endpoint)
 const region = ref(settingsStore.region)
 const accessKey = ref(settingsStore.accessKey)
 const secretKey = ref(settingsStore.secretKey)
+const provider = ref(settingsStore.provider)
 const showSecretKey = ref(false)
 const connectionStatus = ref<'idle' | 'testing' | 'success' | 'error'>('idle')
 const connectionMessage = ref('')
@@ -194,6 +196,8 @@ const saveConnection = () => {
   settingsStore.setEndpoint(endpointUrl.value)
   settingsStore.setRegion(region.value)
   settingsStore.setCredentials(accessKey.value, secretKey.value)
+  settingsStore.setProvider(provider.value)
+  refreshAllClients()
   uiStore.notifySuccess('Settings saved', 'AWS credentials updated successfully.')
 }
 
@@ -400,6 +404,32 @@ watch(() => settingsStore.secretKey, (newVal) => {
               class="block text-sm font-medium mb-1"
               :class="settingsStore.darkMode ? 'text-dark-text' : 'text-light-text'"
             >
+              Provider
+            </label>
+            <select
+              v-model="provider"
+              class="w-full px-3 py-2 rounded-lg border text-sm"
+              :class="settingsStore.darkMode 
+                ? 'bg-dark-bg border-dark-border text-dark-text' 
+                : 'bg-light-bg border-light-border text-light-text'"
+            >
+              <option value="aws">
+                AWS
+              </option>
+              <option value="localstack">
+                LocalStack
+              </option>
+              <option value="ministack">
+                MiniStack
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label
+              class="block text-sm font-medium mb-1"
+              :class="settingsStore.darkMode ? 'text-dark-text' : 'text-light-text'"
+            >
               Endpoint URL
             </label>
             <input
@@ -426,54 +456,6 @@ watch(() => settingsStore.secretKey, (newVal) => {
             >
               Leave empty for default AWS, or specify a custom endpoint (local emulator)
             </p>
-          </div>
-
-          <!-- Quick presets -->
-          <div>
-            <label
-              class="block text-sm font-medium mb-2"
-              :class="settingsStore.darkMode ? 'text-dark-text' : 'text-light-text'"
-            >
-              Quick Presets
-            </label>
-            <div class="flex flex-wrap gap-2">
-              <button
-                class="px-3 py-1 text-xs rounded-lg border transition-colors"
-                :class="settingsStore.darkMode 
-                  ? 'border-dark-border text-dark-muted hover:bg-dark-border hover:text-dark-text' 
-                  : 'border-light-border text-light-muted hover:bg-light-border hover:text-light-text'"
-                @click="endpointUrl = 'https://dynamodb.us-east-1.amazonaws.com'"
-              >
-                DynamoDB (AWS)
-              </button>
-              <button
-                class="px-3 py-1 text-xs rounded-lg border transition-colors"
-                :class="settingsStore.darkMode 
-                  ? 'border-dark-border text-dark-muted hover:bg-dark-border hover:text-dark-text' 
-                  : 'border-light-border text-light-muted hover:bg-light-border hover:text-light-text'"
-                @click="endpointUrl = 'http://localhost:4566'"
-              >
-                Local Emulator
-              </button>
-              <button
-                class="px-3 py-1 text-xs rounded-lg border transition-colors"
-                :class="settingsStore.darkMode 
-                  ? 'border-dark-border text-dark-muted hover:bg-dark-border hover:text-dark-text' 
-                  : 'border-light-border text-light-muted hover:bg-light-border hover:text-light-text'"
-                @click="endpointUrl = 'http://localhost:4566'"
-              >
-                LocalStack (Local)
-              </button>
-              <button
-                class="px-3 py-1 text-xs rounded-lg border transition-colors"
-                :class="settingsStore.darkMode 
-                  ? 'border-dark-border text-dark-muted hover:bg-dark-border hover:text-dark-text' 
-                  : 'border-light-border text-light-muted hover:bg-light-border hover:text-light-text'"
-                @click="endpointUrl = ''"
-              >
-                Clear (AWS Default)
-              </button>
-            </div>
           </div>
 
           <div class="flex items-center gap-4 pt-4">

@@ -42,14 +42,19 @@ import { useSettingsStore } from '@/stores/settings'
 import { APIError } from '../client'
 
 let dynamodbClient: DynamoDBClient | null = null
-let docClient: DynamoDBDocumentClient | null = null
+let cachedEndpoint: string | null = null
 
 function getDynamoDBClient(): DynamoDBClient {
   const settingsStore = useSettingsStore()
+  let endpoint = settingsStore.endpoint
+  if (endpoint.endsWith('/')) {
+    endpoint = endpoint.slice(0, -1)
+  }
   
-  if (!dynamodbClient) {
+  // Recreate client if endpoint changed
+  if (!dynamodbClient || cachedEndpoint !== endpoint) {
     dynamodbClient = new DynamoDBClient({
-      endpoint: settingsStore.endpoint,
+      endpoint,
       region: settingsStore.region,
       credentials: {
         accessKeyId: settingsStore.accessKey,
@@ -57,10 +62,13 @@ function getDynamoDBClient(): DynamoDBClient {
       },
       tls: false,
     })
+    cachedEndpoint = endpoint
   }
   
   return dynamodbClient
 }
+
+let docClient: DynamoDBDocumentClient | null = null
 
 function getDocClient(): DynamoDBDocumentClient {
   if (!docClient) {
@@ -329,9 +337,12 @@ export class DynamoDBService {
         ScannedCount: response.ScannedCount || 0,
         LastEvaluatedKey: response.LastEvaluatedKey,
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('DynamoDB scan error:', error)
+      console.error('DynamoDB scan status:', error.$metadata?.statusCode)
+      console.error('DynamoDB scan response:', error.$response?.body)
       if (error instanceof APIError) throw error
-      throw new APIError(`Failed to scan table: ${tableName}`, 500, 'dynamodb')
+      throw new APIError(`Failed to scan table: ${error.message || error}`, 500, 'dynamodb')
     }
   }
 

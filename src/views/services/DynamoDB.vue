@@ -7,7 +7,7 @@ import Button from '@/components/common/Button.vue'
 import FormInput from '@/components/common/FormInput.vue'
 import FormSelect from '@/components/common/FormSelect.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import * as dynamodb from '@/api/services/dynamodb'
+import { listTables, createTable as dbCreateTable, deleteTable as dbDeleteTable, describeTable, putItem as dbPutItem, getItem, deleteItem as dbDeleteItem, updateItem, query, scan, listStreams, describeStream, getShardIterator, getRecords } from '@/api/services/dynamodb'
 
 const settingsStore = useSettingsStore()
 const toast = useToast()
@@ -405,16 +405,7 @@ async function loadTables() {
   error.value = null
   
   try {
-    const response = await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': 'DynamoDB_20120810.ListTables'
-      },
-      body: JSON.stringify({})
-    })
-    
-    const data = await response.json()
+    const data = await listTables({})
     tables.value = data.TableNames || []
   } catch (e: any) {
     error.value = e.message
@@ -481,14 +472,7 @@ async function createTable() {
       }
     }
     
-    await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': 'DynamoDB_20120810.CreateTable'
-      },
-      body: JSON.stringify(tableInput)
-    })
+    await dbCreateTable(tableInput)
     
     toast.success('Table created successfully')
     showCreateModal.value = false
@@ -509,16 +493,7 @@ async function viewTable(tableName: string) {
   tableLoading.value = true
   
   try {
-    const response = await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': 'DynamoDB_20120810.DescribeTable'
-      },
-      body: JSON.stringify({ TableName: tableName })
-    })
-    
-    const data = await response.json()
+    const data = await describeTable(tableName)
     tableDetails.value = data.Table
   } catch (e: any) {
     tableError.value = 'Failed to get table details: ' + e.message
@@ -538,7 +513,7 @@ async function viewStreams(tableName: string) {
   streamLoading.value = true
   
   try {
-    const response = await dynamodb.listStreams(tableName)
+    const response = await listStreams(tableName)
     streams.value = response.Streams || []
   } catch (e: any) {
     streamError.value = 'Failed to load streams: ' + e.message
@@ -565,13 +540,13 @@ async function selectStream(stream: any) {
     const streamArn = stream.StreamArn
     
     // Get shard iterator
-    const shards = await dynamodb.describeStream(streamArn)
+    const shards = await describeStream(streamArn)
     
     if (shards.StreamDescription && shards.StreamDescription.Shards && shards.StreamDescription.Shards.length > 0) {
       const shard = shards.StreamDescription.Shards[0]
       
       // Get shard iterator
-      const iterator = await dynamodb.getShardIterator(
+      const iterator = await getShardIterator(
         streamArn,
         shard.ShardId,
         'TRIM_HORIZON'
@@ -581,7 +556,7 @@ async function selectStream(stream: any) {
       
       // Get records
       if (shardIterator.value) {
-        const records = await dynamodb.getRecords(shardIterator.value)
+        const records = await getRecords(shardIterator.value)
         streamRecords.value = records.Records || []
         shardIterator.value = records.NextShardIterator
       }
@@ -603,7 +578,7 @@ async function loadMoreRecords() {
   loadingRecords.value = true
   
   try {
-    const records = await dynamodb.getRecords(shardIterator.value)
+    const records = await getRecords(shardIterator.value)
     streamRecords.value = [...streamRecords.value, ...(records.Records || [])]
     shardIterator.value = records.NextShardIterator
     
@@ -660,19 +635,9 @@ async function exploreTable(tableName: string) {
   exploreLoading.value = true
   
   try {
-    // Get table details for key info
-    const detailsResponse = await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': 'DynamoDB_20120810.DescribeTable'
-      },
-      body: JSON.stringify({ TableName: tableName })
-    })
-    const detailsData = await detailsResponse.json()
+    const detailsData = await describeTable(tableName)
     exploreTableDetails.value = detailsData.Table
     
-    // Initial scan
     await scanOrQueryTable(tableName, 'scan')
   } catch (e: any) {
     exploreError.value = 'Failed to load table: ' + e.message
@@ -719,16 +684,12 @@ async function scanOrQueryTable(tableName: string, mode?: 'scan' | 'query') {
       body.ExclusiveStartKey = lastEvaluatedKey.value
     }
     
-    const response = await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': scanMode.value === 'query' ? 'DynamoDB_20120810.Query' : 'DynamoDB_20120810.Scan'
-      },
-      body: JSON.stringify(body)
-    })
-    
-    const data = await response.json()
+    let data
+    if (scanMode.value === 'query') {
+      data = await query(body)
+    } else {
+      data = await scan(body)
+    }
     
     if (data.errorMessage) {
       exploreError.value = data.errorMessage
@@ -800,20 +761,12 @@ async function putItem() {
   try {
     const item = JSON.parse(newItemJson.value)
     
-    await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': 'DynamoDB_20120810.PutItem'
-      },
-      body: JSON.stringify({
-        TableName: exploreTableName.value,
-        Item: item
-      })
+    await dbPutItem({
+      TableName: exploreTableName.value,
+      Item: item
     })
     
     showPutItemModal.value = false
-    // Refresh items
     lastEvaluatedKey.value = null
     await scanOrQueryTable(exploreTableName.value, 'scan')
   } catch (e: any) {
@@ -846,21 +799,13 @@ async function deleteItem() {
       }
     }
     
-    await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': 'DynamoDB_20120810.DeleteItem'
-      },
-      body: JSON.stringify({
-        TableName: exploreTableName.value,
-        Key: key
-      })
+    await dbDeleteItem({
+      TableName: exploreTableName.value,
+      Key: key
     })
     
     showDeleteItemModal.value = false
     itemToDelete.value = null
-    // Refresh items
     lastEvaluatedKey.value = null
     await scanOrQueryTable(exploreTableName.value, 'scan')
   } catch (e: any) {
@@ -882,14 +827,7 @@ async function deleteTable() {
   
   deleting.value = true
   try {
-    await fetch('/dynamodb/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-amz-json-1.0',
-        'X-Amz-Target': 'DynamoDB_20120810.DeleteTable'
-      },
-      body: JSON.stringify({ TableName: tableToDelete.value })
-    })
+    await dbDeleteTable(tableToDelete.value)
     showDeleteModal.value = false
     tableToDelete.value = null
     await loadTables()

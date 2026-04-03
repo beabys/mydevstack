@@ -118,16 +118,6 @@ src/
 └── App.vue               # Root component
 ```
 
-## Technologies
-
-- **Vue 3** - Progressive JavaScript framework
-- **TypeScript** - Type-safe JavaScript
-- **Pinia** - State management
-- **Vue Router** - Client-side routing
-- **Tailwind CSS** - Utility-first CSS
-- **Axios** - HTTP client
-- **Heroicons** - SVG icons
-
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
@@ -141,7 +131,3 @@ If you find this project helpful, consider buying me a coffee!
 ## Contributing
 
 Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) first.
-
----
-
-Built with ❤️ using Vue 3 and Tailwind CSS
